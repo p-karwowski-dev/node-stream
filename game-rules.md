@@ -1,270 +1,269 @@
-# Space Strategy Game — Rules and Gameplay Specification
+# Space Strategy Game: Rules and Gameplay Specification
 
-**Version:** 1.0  
-**Status:** Core rules updated from the latest gameplay clarifications  
+**Version:** 2.2
+**Scope:** Game concept, rules and the game loop. The lobby and UI are described in `game-ui.md`. Technical decisions are described in `game-design.md`.
+
+**Parameters and rules:** Every parameter is configurable (see Section 3). The rules in this document are hardcoded and are not configurable.
 
 ## 1. Game overview
 
-The game takes place in a three-dimensional space containing **1,000 randomly distributed planets (10 × 10 × 10)**.
+Players compete in a three-dimensional space full of planets. Each player starts on one planet and builds directed links from the planets they own to other planets. Owned planets produce spaceships. Ships travel along the links one hop at a time. On arrival a ship fights, captures a planet, reinforces a planet, or moves on.
 
-Players select a starting planet and compete to control planets by creating directed connections between them. Owned planets automatically produce spaceships. Spaceships travel along connections one hop at a time, attack unowned or enemy planets, capture neutral planets, and reinforce friendly planets.
+A match ends when one player controls enough planets (domination), when every player is eliminated, or when the timer runs out.
 
-The main gameplay loop is:
+Main loop:
 
-1. Select and claim a starting planet.
-2. Create directed connections from owned planets to other planets.
-3. Owned planets produce spaceships automatically.
-4. Spaceships travel along individual connections (hops).
-5. On arrival, a spaceship attacks, captures, reinforces, or continues its journey according to the destination planet's current state.
-6. Players create and remove connections to influence where their spaceships travel.
+1. Each player picks a starting planet.
+2. Players create links from planets they own.
+3. Owned planets produce ships.
+4. Ships travel along links and are sent onward by each planet they reach. A planet without outgoing links keeps its ships as reinforcement.
+5. Ships fight on planets. Planets are captured, lost or reinforced.
+6. The match ends by domination, by elimination of all players, or by timer.
 
 ## 2. Definitions
 
-### 2.1 Planet ownership and status
+| Term                         | Meaning                                                                                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Planet**                   | A point in space with an owner, current points, max points and links.                                                                                 |
+| **Player-owned**             | Owned by a player, with at least 1 point.                                                                                                             |
+| **Rogue**                    | Unowned, with at least 1 point. A rogue planet does not produce ships and does not regain points.                                                     |
+| **Neutral**                  | Unowned, with 0 points. The next ship to arrive captures it. A neutral planet does not produce ships.                                                 |
+| **Link**                     | A directed connection `A → B`. Ships can travel from A to B only. Two planets of the same owner can be linked in one direction at a time (Section 8). |
+| **Active link**              | A link that has not been removed.                                                                                                                     |
+| **Link length**              | The straight-line distance between the centres of the two planets.                                                                                    |
+| **Outgoing / incoming link** | `A → B` is outgoing for A and incoming for B. Only outgoing links are used for routing.                                                               |
+| **Hop**                      | One ship journey along one link. A longer trip is a series of hops.                                                                                   |
+| **Fleet**                    | All ships of one player that are on one planet (arrived, waiting, or just produced).                                                                  |
+| **Tick**                     | One step of the game loop (see Section 5).                                                                                                            |
+| **Link owner**               | The owner of the link's source planet.                                                                                                                |
+
+Planet colours: the owner sees their own planets with a green glow and enemy planets with a red glow. Rogue and neutral planets use the same neutral colour. Spectators see the same colours.
+
+## 3. Parameters
+
+All values can be changed in the config. Defaults are shown.
+
+| Parameter                             |      Default | Meaning                                                                                            |
+| ------------------------------------- | -----------: | -------------------------------------------------------------------------------------------------- |
+| `maxPlayers`                          |           20 | Maximum number of players in a match.                                                              |
+| `matchDurationSeconds`                |          300 | Match length.                                                                                      |
+| `dominationPercent`                   |           30 | Share of planets that wins the match.                                                              |
+| `planetDistribution`                  | `[10,10,10]` | Grid: planets per axis `[x,y,z]`. Random: a single integer (planet count). `null` is not accepted. |
+| `minPlanetDistance`                   |          200 | Minimum distance between two planets (units).                                                      |
+| `minReachablePlanets`                 |            0 | Minimum number of planets within `maxHopDistance` of every planet.                                 |
+| `mapScale`                            |            1 | Multiplier for the map size. Must be 1 or more. Mainly used in random mode (Section 4).            |
+| `maxHopDistance`                      |          400 | Maximum link length and maximum length of one hop (units).                                         |
+| `initialShipSpeed`                    |          200 | Ship speed on the first hop (units per second).                                                    |
+| `speedDecayPercent`                   |           10 | Speed lost after each completed hop, as a percentage of the initial speed.                         |
+| `hopDelayTicks`                       |            0 | Ticks a ship waits at a planet between arriving and departing.                                     |
+| `tickLengthMs`                        |          100 | Length of one tick.                                                                                |
+| `productionIntervalTicks`             |           10 | Ticks between production rounds (10 ticks of 100 ms = 1 second).                                   |
+| `shipsPerProduction`                  |            1 | Ships produced by each owned planet per production round.                                          |
+| `planetPointsMin` / `planetPointsMax` |       1 / 50 | Range of random starting points of a planet.                                                       |
+| `attackDamagePerShip`                 |            1 | Points a surviving attacking ship removes from a planet.                                           |
+| `reinforcementPerShip`                |            1 | Points a surviving owner ship adds to its planet.                                                  |
+| `capturePoints`                       |            1 | Points a planet has right after it is captured.                                                    |
+| `seed`                                |       random | Seed for the world generator.                                                                      |
+| `unitToPixel`                         |           10 | UI only. 1 unit = 10 pixels.                                                                       |
+
+### 3.1 Parameter validation
+
+A config that breaks any of these constraints is rejected:
+
+1. `maxPlayers` ≥ 1.
+2. `matchDurationSeconds` > 0.
+3. `dominationPercent` > 0 and ≤ 100.
+4. `planetDistribution`: grid values are integers ≥ 1; random value is an integer ≥ 1.
+5. `minPlanetDistance` > 0 and `minPlanetDistance` ≤ `maxHopDistance` (otherwise no link is possible).
+6. `minReachablePlanets` is an integer ≥ 0.
+7. `mapScale` ≥ 1.
+8. `initialShipSpeed` > 0.
+9. `speedDecayPercent` ≥ 0. A value of 0 means ships never lose speed and can hop without limit.
+10. `hopDelayTicks` is an integer ≥ 0.
+11. `tickLengthMs` > 0.
+12. `productionIntervalTicks` is an integer ≥ 1.
+13. `shipsPerProduction` is an integer ≥ 1.
+14. `planetPointsMin` ≥ 1 and `planetPointsMin` ≤ `planetPointsMax`.
+15. `attackDamagePerShip`, `reinforcementPerShip` and `capturePoints` are integers ≥ 1.
+
+## 4. World and generator
+
+1. The world is a cube. Its side is a base size multiplied by `mapScale`.
+   - Grid: base size = largest axis count × `minPlanetDistance`.
+   - Random: base size = the cube root of the planet count, rounded up, × `minPlanetDistance`.
+2. **Grid mode:** `planetDistribution` is `[x,y,z]`. Planets are spread evenly over the cube with the given counts per axis. The spacing on an axis is `side / n`, where `n` is the count on that axis.
+3. **Random mode:** `planetDistribution` is one integer. Planets are placed at random positions in the cube, using `seed`. With `mapScale` 1 the cube is as dense as a grid, so many random positions break rule 4 and are removed. Raise `mapScale` in random mode to keep the final planet count close to the requested count.
+4. No two planets may be closer than `minPlanetDistance`.
+5. Every planet must have at least `minReachablePlanets` other planets within `maxHopDistance`.
+6. After the first placement, the generator removes every planet that breaks rule 4 or 5, and repeats until no planet breaks a rule. The final planet count can be lower than the requested count.
+7. The final planet count is used for the domination check.
+8. Every planet starts as **rogue** with random integer points from `planetPointsMin` to `planetPointsMax`. Its **max points** equal these starting points and never change.
+9. Players choose their starting planet. The planet keeps its points and its max points. How starting planets are picked is described in `game-ui.md`.
+
+## 5. Game loop
+
+The game runs in ticks of `tickLengthMs`. Ticks are numbered from 1. Tick `n` covers match time up to `n × tickLengthMs`.
+
+**Player actions.** Link creation and removal requested during a tick are applied at the start of the next tick, before movement, in the order they were received. Each action is checked against Section 8 when it is applied. An action that is no longer valid at that moment (for example, the player no longer owns the source planet) is dropped.
+
+Each tick runs these steps in order:
+
+```mermaid
+flowchart LR
+  A[Movement and arrivals] --> B[Production]
+  B --> C[Ship-to-ship battle]
+  C --> D[Ship-to-planet battle]
+  D --> E[Dispatch / reinforce]
+  E --> F[Elimination and win checks]
+```
+
+1. **Movement and arrivals.** Ships move in straight lines. Ships whose arrival time has been reached arrive at their destination planet and join that planet's fleet for their player.
+2. **Production.** On every production round (every `productionIntervalTicks`), each player-owned planet produces `shipsPerProduction` ships for its owner, whether or not it has outgoing links. Produced ships join the owner's fleet on that planet.
+3. **Ship-to-ship battle.** Fleets of different players on the same planet fight (Section 7.1).
+4. **Ship-to-planet battle.** A surviving fleet that does not own the planet attacks it (Section 7.2).
+5. **Dispatch / reinforce.** Surviving fleets of the planet's owner are sent onward, or reinforce the planet (Section 7.3).
+6. **Elimination and win checks.** See Section 9.
 
-A planet has an owner, a current point value, and a maximum point value.
+Ships pass through each other in open space. Fights happen only on planets.
 
-| Planet state | Owner | Points | Meaning |
-|---|---|---:|---|
-| **Player-owned** | A player ID | 1 or more | Controlled by that player. |
-| **Enemy-owned** | Another player's ID (from the observing player's perspective) | 1 or more | Controlled by an opponent. |
-| **Rogue** | None (`null`) | 1 or more | An unowned planet with points remaining. Rogue planets can be weakened before they are captured. |
-| **Neutral** | None (`null`) | 0 | An unowned planet with no points. The next spaceship to arrive captures it. |
+## 6. Production, routing and ship speed
 
-Rogue and neutral planets are both unowned and use the neutral visual appearance. Their gameplay distinction is their point value: a rogue planet has at least one point; a neutral planet has zero points.
+### 6.1 Production
 
-### 2.2 Links and direction
+1. Production runs on a global schedule: on every tick whose number is a multiple of `productionIntervalTicks`. The first production round is on tick `productionIntervalTicks`. A planet captured between rounds waits for the next production round.
+2. Every player-owned planet produces, with or without outgoing links. Rogue and neutral planets produce nothing.
+3. New ships belong to the planet's owner, start with `initialShipSpeed`, and join that tick's battles.
+4. Produced ships that survive the battles are dispatched if the planet has active outgoing links. If it has none, they reinforce the planet (Section 7.3).
+5. The production limit applies only to new ships. Arriving ships that continue are not limited.
 
-A **link** is a directed connection from one planet to another.
+### 6.2 Round-robin routing
 
-For a link `A → B`:
+1. Each planet keeps an ordered list of its active outgoing links. A new link is added to the end of the list. A removed link is taken out of the list.
+2. Each planet has one **cursor**: the index of the last used outgoing link. Before the first departure the cursor is −1.
+3. The same cursor is used for newly produced ships and for arriving ships that continue.
+4. For each departing ship the target index is `cursor + 1`. If this index is equal to or greater than the list length, the target index is 0. The ship departs on the link at the target index and the cursor becomes the target index.
+5. When a link is removed and its index is lower than or equal to the cursor, the cursor is reduced by 1.
+6. When the planet's owner changes, the cursor is reset to −1.
+7. If the list is empty, the dispatch logic is skipped and no ship departs (Section 7.3).
+8. Ships leave a planet in fleet order (Section 7.4).
 
-- Planet A has an **outgoing** link to B.
-- Planet B has an **incoming** link from A.
-- Ships may travel from A to B using this link.
-- The link does not allow travel from B to A. A separate `B → A` link is required for travel in the opposite direction.
+**Example.** Links: `A → D`, `B → D`, `D → E`, `D → F`. D's outgoing list is `[E, F]` and the last ship went to E (cursor 0). In one tick D produces 1 ship and 2 friendly ships arrive and continue (with `hopDelayTicks` 0). The three ships depart in order to `F` (index 1), `E` (index 2 → 0), `F` (index 1). The incoming links from A and B do not affect routing.
 
-### 2.3 Hop
+### 6.3 Hop delay
 
-A **hop** is one spaceship journey along one directed link, from its source planet to that link's destination planet. A longer journey consists of multiple hops, with the next hop selected only when the spaceship reaches an intermediate planet.
+1. A ship that arrives at a planet where it will continue departs `hopDelayTicks` ticks later. With the default of 0 it departs in the same tick. Newly produced ships are not delayed and are handled in the tick they are produced.
+2. While waiting, a ship belongs to its player's fleet on that planet and takes part in battles.
+3. When the delay ends, the ship is handled by Section 7.3: it departs if the planet has active outgoing links, or it reinforces the planet if it has none. The destination is chosen at departure, using the cursor at that moment.
 
-## 3. Initial world and starting planets
+### 6.4 Speed and hop time
 
-1. The initial world contains **1,000 planets** distributed randomly in three-dimensional space (10 × 10 × 10).
-2. Every planet initially spawns as a **rogue planet**.
-3. Each rogue planet is assigned a random integer point value from **1 to 50**, inclusive.
-4. A planet's initial point value also defines its **maximum points**. For example, a planet spawned with 24 points has 24 current points and a maximum of 24 points.
-5. At the beginning of the game, each player selects a rogue planet and confirms it as their starting planet.
-6. The confirmed starting planet becomes owned by that player. Its randomly assigned points and maximum points are not changed by the claim under the current specification.
+1. A ship starts with `initialShipSpeed`.
+2. After each completed hop, the ship loses `speedDecayPercent` of the initial speed. This is a fixed amount (20 units per second with the defaults), not a percentage of the current speed.
+3. A departure is timestamped with the current time when the tick loop reaches the dispatch phase. Arrival time = departure timestamp + link length ÷ current speed. The ship arrives in the first tick whose movement phase time is at or after the arrival time.
+4. A ship whose speed is 0 or less cannot start another hop.
+5. There is no separate hop limit. With the defaults, the speed decay allows 10 hops.
+6. A ship with no speed left still fights when it arrives. If it survives in the owner's fleet, it reinforces the planet when the planet has no active outgoing links, and is removed when the planet has active outgoing links.
 
-## 4. Planet points, ownership and appearance
+## 7. Combat
 
-1. A planet's points cannot fall below zero or exceed its maximum points.
-2. Player-owned planets are displayed with a **green glow** for their owner.
-3. Enemy-owned planets are displayed with a **red glow** to an observing player.
-4. Rogue and neutral planets use the **neutral colour** and have no player ownership glow.
-5. When a rogue or owned planet's points reach zero, it immediately becomes neutral: its owner is set to `null` and its points remain zero.
-6. When a planet becomes neutral at zero points, all of its incoming and outgoing links are removed immediately.
-7. A neutral planet is captured by the next spaceship that arrives. The new owner is the spaceship's owner, and the planet starts with **1 point**.
-8. A planet's maximum points remain the value assigned when it spawned, including after it is weakened, neutralised, or captured.
+### 7.1 Ship-to-ship battle
 
-## 5. Creating and removing links
+Applies when ships of two or more players are on the same planet in the same tick. This includes the planet's owner. A planet with a fleet of only one player has no ship-to-ship battle.
 
-1. A player may create an outgoing link from a planet they own to another planet, provided the distance between the two planets is no greater than **2,000 world units**.
-2. Creating `A → B` adds an outgoing link to A and an incoming link to B. It does not create a return link.
-3. Only the source planet's owner may create or remove one of that planet's outgoing links.
-4. A link's travel distance is the distance between its two planets.
-5. Removing a link prevents it from being selected for future hops.
-6. Removing a link does **not** cancel a spaceship that has already started travelling along that link. That spaceship completes its current hop.
-7. When a planet becomes neutral at zero points, all its incoming and outgoing links are removed immediately. This does not cancel hops that have already started; affected spaceships complete their current hop and are then evaluated against the destination planet's current state.
-8. When a planet is captured, its incoming and outgoing links are removed. In the normal capture flow, these links will already have been removed when the planet became neutral.
+1. Ships of the same player on the planet form one fleet.
+2. The largest fleet loses ships equal to the size of the second-largest fleet.
+3. All other fleets are destroyed.
+4. If the two largest fleets are the same size, every fleet is destroyed.
 
-## 6. Spaceship production
+**Example.** A has 10 ships, B has 11 and C has 16. C loses 11 and 5 ships of C remain. A and B are destroyed.
 
-1. An owned planet with at least one active outgoing link produces **one new spaceship per 1-second production tick**.
-2. A planet produces no new spaceship while it has no active outgoing links.
-3. The one-ship-per-tick limit applies to **new production only**. It does not limit spaceships arriving at the planet and continuing onward; each eligible incoming spaceship continues independently.
-4. A newly produced spaceship belongs to the player who owns the producing planet.
-5. A newly produced spaceship starts with an initial speed of **1,000 world units per second**.
-6. The planet selects the spaceship's first destination using its round-robin route selection (see Section 7).
+**Example.** Two ships from different players arrive at a neutral planet in the same tick. They destroy each other and the planet stays neutral.
 
-## 7. Round-robin route selection
+### 7.2 Ship-to-planet battle
 
-Each planet maintains one shared round-robin selection position for its **outgoing links**.
+Applies to a surviving fleet that does not own the planet (the planet is rogue, neutral or owned by someone else).
 
-The same selection position is used for:
+1. Each ship removes `attackDamagePerShip` points from the planet. Ships used up this way are removed.
+2. If the planet still has points, it keeps its owner and the fleet is gone.
+3. If the planet reaches 0 points, it becomes **neutral**: its owner is cleared and every link owned by the old owner that touches this planet is removed (Section 8.7).
+4. If ships are left over, one of them **captures** the planet. The planet gets `capturePoints` points (not above max points) and the fleet's owner becomes the planet's owner.
+5. Any further left-over ships reinforce the planet by `reinforcementPerShip` each, up to max points. Ships beyond max points are destroyed and have no effect on the planet.
+6. A neutral planet has no points to remove, so the first ship captures it and the rest reinforce it.
+7. If no ships are left over, the planet stays neutral until a later ship arrives.
 
-- New spaceships produced by the planet.
-- Incoming friendly spaceships that reach the planet and continue to another planet.
+**Example.** A fleet of 5 hits a rogue planet with 2 points. Two ships bring it to 0. One of the remaining 3 ships captures it (1 point) and the other 2 reinforce it (3 points, limited by max points).
 
-Only active outgoing links are included in the selection. Incoming links never form part of the route-selection list.
+### 7.3 Owner's fleet: dispatch or reinforce
 
-### Example
+A surviving fleet that owns the planet (arrived, waiting ships whose delay has ended, and produced ships):
 
-The links are:
+1. If the planet has active outgoing links, its ships are sent out by round-robin (Section 6.2), after any hop delay. A ship with no speed left is removed instead (Section 6.4).
+2. If the planet has no active outgoing links, each ship adds `reinforcementPerShip` points, up to max points. This includes ships with no speed left. Ships beyond max points are destroyed and have no effect on the planet.
 
-- `A → D`
-- `B → D`
-- `D → E`
-- `D → F`
+### 7.4 Fleet order
 
-Therefore:
+A fleet is an ordered list. Arriving ships and produced ships are added to the end, ordered by arrival time (production time for produced ships) and then by ship ID. Ships lost in battle are taken from the front. Ships that depart are also taken from the front.
 
-| Planet | Incoming links | Outgoing links |
-|---|---|---|
-| A | — | D |
-| B | — | D |
-| D | A, B | E, F |
-| E | D | — |
-| F | D | — |
+### 7.5 Planet points
 
-Suppose D's last dispatched spaceship was sent to E. D's outgoing selection order is `[E, F]`, so the next destination is F.
+Planet points never go below 0 or above max points. Max points never change, including after the planet is weakened, made neutral or captured.
 
-If, during the relevant processing period, D produces one new spaceship and receives two friendly spaceships that must continue, the three dispatches consume the shared round-robin sequence:
+## 8. Links and ownership
 
-1. F
-2. E
-3. F
+1. A player can create a link only from a planet they own.
+2. A link can go to any other planet (owned, enemy, rogue or neutral), if its length is at most `maxHopDistance`.
+3. Links are unique: `A → B` can exist only once. There is no limit on the number of outgoing links per planet other than the planets within `maxHopDistance`.
+4. Creating `A → B` does not create `B → A`. If A and B have the same owner, `A → B` exists and `B → A` is created, `A → B` is removed and `B → A` takes its place. If A and B have different owners, both links can exist at the same time.
+5. Only the owner of the source planet can remove its outgoing link.
+6. Removing a link does not stop ships already travelling on it. They finish that hop.
+7. When a player-owned planet becomes neutral, only the links owned by the old owner are removed: all its outgoing links, and its incoming links that start on the old owner's planets. Incoming links from other players stay. A rogue planet that becomes neutral has no old owner, so no link is removed. Ships already travelling finish their hop.
+8. A captured planet always passes through neutral (Section 7.2), so the same rule applies. Incoming links of the capturing player stay, so the attacker keeps its route to the planet.
+9. A ship arriving at a planet is judged by the planet's state at the moment of arrival, not by its state when the hop began. A planet that has changed owner does not route the ship. The ship fights, captures or reinforces according to Section 7.
 
-The incoming links `[A, B]` do not affect this selection. All three departures are distributed across D's outgoing links `[E, F]`.
+## 9. Winning and elimination
 
-When a link is removed, it is skipped by future selections. The round-robin selection must continue over the remaining active outgoing links. If no active outgoing links remain, no next hop can be selected.
+Checks run at the end of every tick, in this order.
 
-## 8. Spaceship speed and hop duration
+### 9.1 Elimination
 
-### 8.1 Initial speed and speed reduction
+A player is eliminated for good, and becomes a spectator, only when they own 0 planets and have 0 ships. Ships include ships in flight and ships waiting for their next hop. A player with no planets but with ships left is still in the match. A ship of theirs that captures a neutral planet gives them a planet again.
 
-- Initial spaceship speed: **1,000 world units per second**.
-- After each completed hop, the spaceship loses **10% of its initial speed**, i.e. 100 units per second.
-- The reduction is a fixed amount based on the initial speed; it is not 10% of the speed remaining at that point.
-- The reduced speed is used for the next hop.
+If every player is eliminated, the match ends immediately as a draw.
 
-| Hop | Speed used during hop | Speed after hop completes |
-|---:|---:|---:|
-| 1 | 1,000 | 900 |
-| 2 | 900 | 800 |
-| 3 | 800 | 700 |
-| 4 | 700 | 600 |
-| 5 | 600 | 500 |
-| 6 | 500 | 400 |
-| 7 | 400 | 300 |
-| 8 | 300 | 200 |
-| 9 | 200 | 100 |
-| 10 | 100 | 0 |
+### 9.2 Domination
 
-A spaceship can complete at most ten hops. Once its speed reaches zero, it cannot start another hop and is removed if another hop would be required.
+A player who owns at least the domination threshold wins immediately. The threshold is `dominationPercent` of the final planet count, rounded down, with a minimum of 2 planets. Example: 30% of 997 planets is 299.1, so 299 planets are needed. 30% of 5 planets is 1.5, so 2 planets are needed. If the map has fewer than 2 planets, the match can end only by timer or elimination.
 
-### 8.2 Travel time
+### 9.3 Timer
 
-Each hop's travel time is calculated using that hop's distance and the spaceship's current speed:
+The match ends at the end of the first tick after `matchDurationSeconds` has passed: the first tick `n` with `n × tickLengthMs` > `matchDurationSeconds × 1000`. The player with the most planets wins. With the defaults the last tick is 3001.
 
-`hop travel time = link distance / current spaceship speed`
+### 9.4 Tie-break
 
-For example, a 2,000-unit link takes 2 seconds at 1,000 units/second, or 4 seconds at 500 units/second.
+If two or more players are level on the same check (including two players reaching domination in the same tick), the winner is decided in this order:
 
-The maximum permitted link distance is **2,000 world units**. The 10ms pause previously considered between hops is **not part of the rules**; a continuing spaceship starts its next hop without that additional pause.
+1. Most planets.
+2. Highest total current planet points.
+3. Highest total max planet points of their planets.
+4. Most ships (ships in flight plus ships waiting for their next hop).
 
-### 8.3 Movement behaviour
+If all four are equal, the match is a draw.
 
-1. A spaceship travels in a straight line from the source planet to the destination planet of its current hop.
-2. A spaceship only needs a destination for its next hop; it does not have a fixed complete route to a final destination.
-3. The destination planet determines the next hop when the spaceship arrives, if continuation is allowed.
-4. A spaceship may revisit planets and travel around cycles, provided it still has speed to start another hop.
-5. Spaceships do not collide with one another and may pass through one another.
+### 9.5 No early end
 
-## 9. What happens when a spaceship arrives?
+The match does not end when only one player remains. That player keeps playing until domination or the timer. A match with a single player is allowed.
 
-The destination planet's **current** ownership and point state are evaluated when the spaceship arrives. The result may differ from what the client expected when the spaceship began its hop, because ownership and links can change during flight.
+## 10. Players and connections
 
-### 9.1 Arrival at an enemy-owned planet
+1. The host starts the match. No player can join after it has started. There is no minimum number of players.
+2. Players cannot create or send ships by hand. Production, routing, movement, battles, captures and reinforcements are automatic.
+3. Players can select and inspect any planet or ship. All information is visible to all players.
+4. Players can create links and remove links (Section 8).
+5. The match cannot be paused, by the host or by any player.
+6. If a player disconnects, their planets keep running. The player can reconnect and regain control.
 
-1. The spaceship subtracts **1 point** from the planet.
-2. The spaceship is destroyed upon contact and is removed.
-3. If the planet still has points remaining, it retains its current owner.
-4. If the planet reaches zero points, it immediately becomes neutral and all incoming and outgoing links are removed.
-5. The spaceship that reduces the planet to zero is destroyed; it does not capture the planet.
-6. The next spaceship to arrive at the now-neutral planet captures it (see Section 9.3).
+## 11. Open items
 
-### 9.2 Arrival at a rogue planet
-
-1. A rogue planet has no owner but has at least one point.
-2. An arriving spaceship subtracts **1 point** from the rogue planet and is destroyed.
-3. If the points reach zero, the planet becomes neutral and all incoming and outgoing links are removed.
-4. The next spaceship to arrive captures the neutral planet, regardless of which player owns that spaceship.
-
-### 9.3 Arrival at a neutral planet
-
-1. A neutral planet has no owner and zero points.
-2. The arriving spaceship captures it, regardless of which player previously owned it (if any).
-3. The planet's owner becomes the spaceship's owner.
-4. The planet's points become **1**; its maximum points remain unchanged.
-5. The capturing spaceship is removed.
-
-### 9.4 Arrival at a friendly planet with active outgoing links
-
-1. The planet selects the next destination from its active outgoing links using its shared round-robin selection position.
-2. The arriving spaceship continues along the selected link without an additional 10ms pause.
-3. Its next-hop speed is the speed remaining after the completed hop's 100-units-per-second reduction.
-4. If its speed has reached zero, it cannot start another hop and is removed. It does not receive a terminal-planet reinforcement at this intermediate planet.
-
-### 9.5 Arrival at a friendly planet with no active outgoing links
-
-1. The spaceship adds **1 point** to the planet.
-2. The planet's points are capped at its maximum points.
-3. If the planet is already at maximum points, its points do not change.
-4. The spaceship is removed after this arrival.
-
-## 10. Ships in flight when links or ownership change
-
-1. Removing a link does not cancel a spaceship already travelling along that link.
-2. When a planet becomes neutral, its incoming and outgoing links are removed immediately.
-3. Spaceships already travelling towards that planet continue to the planet.
-4. Spaceships that already departed from that planet also complete the hop they had started, even if the planet's links are subsequently removed or its ownership changes.
-5. On arrival, each spaceship is evaluated using the destination planet's current ownership, points and active outgoing links. It does not rely on the planet's state from the time the hop began.
-6. A removed link cannot be selected for a new hop.
-
-## 11. Player actions
-
-Players can:
-
-1. **Select a starting planet:** Choose a rogue planet at the beginning of the game and confirm it as their starting planet.
-2. **Select and inspect a planet:** View its owner, current points, maximum points, incoming links and outgoing links.
-3. **Create a link:** Create a directed outgoing link from an owned planet to another planet within the 2,000-unit maximum distance.
-4. **Remove a link:** Remove an outgoing link from a planet the player owns.
-5. **Inspect a spaceship:** View its owner, current hop (source and next destination), current speed and journey progress.
-
-Players do not manually create or dispatch spaceships. Production, route selection, movement, attacks, captures, reinforcements and spaceship removal happen automatically according to the rules above.
-
-## 12. Initial game parameters
-
-| Parameter | Initial value |
-|---|---:|
-| Number of planets | 1,000 |
-| Planet count representation | 10 × 10 × 10 = 1,000 planets |
-| Initial planet state | Rogue |
-| Initial rogue planet points | Random integer from 1 to 50 |
-| Maximum planet points | Equal to that planet's initial random points |
-| Initial spaceship speed | 1,000 world units/second |
-| Speed reduction per completed hop | 100 world units/second (10% of initial speed) |
-| Maximum link distance | 2,000 world units |
-| Planet production interval | 1 second |
-| New ships per producing planet per production tick | 1 |
-| Attack damage per spaceship | 1 point |
-| Reinforcement per spaceship at a friendly terminal planet | 1 point, subject to maximum |
-| Delay between hops | None |
-
-## 13. Rules not yet fully specified
-
-The following details are not defined by the confirmed rules and should be decided before they are hard-coded:
-
-1. **Starting-planet exclusivity:** Can two players select the same rogue planet during the starting phase, or must each starting planet be unique? A likely rule is that a confirmed starting planet becomes unavailable to other players.
-2. **Starting-planet points:** This document assumes that claiming a starting rogue planet changes only its owner; its randomly assigned current points and maximum points remain unchanged. Confirm if claiming should instead set or modify its points.
-3. **Outgoing-link order:** Round-robin selection needs a stable order for a planet's active outgoing links (for example, link creation order). The example uses `[E, F]`, but the general ordering rule has not been specified.
-4. **Simultaneous dispatch ordering:** If a production tick and multiple incoming arrivals trigger departures from the same planet at the same simulation time, the shared cursor must be advanced in a deterministic order. The rule that all departures share the cursor is confirmed; the tie-breaking order between simultaneous triggers is not.
-5. **First production time:** It is specified that production occurs every second, but not whether a planet's first production occurs immediately when it becomes owned/gets its first outgoing link or at the next global production tick.
-6. **Victory and match-end conditions:** The objective and condition for winning or ending a match have not yet been defined.
-7. **World dimensions and placement constraints:** The 10 × 10 × 10 notation describes the 1,000-planet count. The physical coordinate bounds, planet radii, and any minimum separation between spawned planets have not been specified.
-
----
-
-**End of gameplay rules.** Architecture, networking protocols, persistence, server scaling and performance optimisation are intentionally outside the scope of this document.
+1. How starting planets are picked and how two players choosing the same planet are handled. To be defined in `game-ui.md`.
+2. The generator algorithm, including the case where removals leave fewer planets than players, and the technical details of the game loop. To be defined in `game-design.md`.
+3. How ship IDs are assigned (see Section 7.4).
