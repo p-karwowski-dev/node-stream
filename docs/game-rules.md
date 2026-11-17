@@ -1,6 +1,8 @@
 # Space Strategy Game: Rules and Gameplay Specification
 
-**Version:** 2.2
+## Simple, competitive, fast-paced space RTS with depth
+
+**Version:** 2.4
 **Scope:** Game concept, rules and the game loop. The lobby and UI are described in `game-ui.md`. Technical decisions are described in `game-design.md`.
 
 **Parameters and rules:** Every parameter is configurable (see Section 3). The rules in this document are hardcoded and are not configurable.
@@ -13,7 +15,7 @@ A match ends when one player controls enough planets (domination), when every pl
 
 Main loop:
 
-1. Each player picks a starting planet.
+1. Each player claims a starting planet.
 2. Players create links from planets they own.
 3. Owned planets produce ships.
 4. Ships travel along links and are sent onward by each planet they reach. A planet without outgoing links keeps its ships as reinforcement.
@@ -47,6 +49,7 @@ All values can be changed in the config. Defaults are shown.
 | ------------------------------------- | -----------: | -------------------------------------------------------------------------------------------------- |
 | `maxPlayers`                          |           20 | Maximum number of players in a match.                                                              |
 | `matchDurationSeconds`                |          300 | Match length.                                                                                      |
+| `startCountdownSeconds`               |            5 | Wait between the start of the match and tick 1. Players use it to load and look at the map.        |
 | `dominationPercent`                   |           30 | Share of planets that wins the match.                                                              |
 | `planetDistribution`                  | `[10,10,10]` | Grid: planets per axis `[x,y,z]`. Random: a single integer (planet count). `null` is not accepted. |
 | `minPlanetDistance`                   |          200 | Minimum distance between two planets (units).                                                      |
@@ -80,31 +83,35 @@ A config that breaks any of these constraints is rejected:
 8. `initialShipSpeed` > 0.
 9. `speedDecayPercent` ≥ 0. A value of 0 means ships never lose speed and can hop without limit.
 10. `hopDelayTicks` is an integer ≥ 0.
-11. `tickLengthMs` > 0.
+11. `tickLengthMs` is an integer > 0.
 12. `productionIntervalTicks` is an integer ≥ 1.
 13. `shipsPerProduction` is an integer ≥ 1.
 14. `planetPointsMin` ≥ 1 and `planetPointsMin` ≤ `planetPointsMax`.
 15. `attackDamagePerShip`, `reinforcementPerShip` and `capturePoints` are integers ≥ 1.
+16. `startCountdownSeconds` ≥ 0.
 
 ## 4. World and generator
 
 1. The world is a cube. Its side is a base size multiplied by `mapScale`.
    - Grid: base size = largest axis count × `minPlanetDistance`.
-   - Random: base size = the cube root of the planet count, rounded up, × `minPlanetDistance`.
-2. **Grid mode:** `planetDistribution` is `[x,y,z]`. Planets are spread evenly over the cube with the given counts per axis. The spacing on an axis is `side / n`, where `n` is the count on that axis.
-3. **Random mode:** `planetDistribution` is one integer. Planets are placed at random positions in the cube, using `seed`. With `mapScale` 1 the cube is as dense as a grid, so many random positions break rule 4 and are removed. Raise `mapScale` in random mode to keep the final planet count close to the requested count.
+   - Random: base size = the cube root of the planet count, rounded up, × `minPlanetDistance` × 1.25. The factor 1.25 leaves room for random placement, which cannot fill a cube as densely as a grid.
+2. **Grid mode:** `planetDistribution` is `[x,y,z]`. Planets are spread evenly over the cube with the given counts per axis. The spacing on an axis is `side / n`, where `n` is the count on that axis. Each planet sits at the centre of its cell, so the margin to the edge of the cube is half the spacing on every side.
+3. **Random mode:** `planetDistribution` is one integer. Planets are placed one by one at random positions in the cube, using `seed`. A position closer than `minPlanetDistance` to an already placed planet is rejected and a new position is drawn. Placement stops when the requested number of planets is placed, or when the generator gives up after a fixed number of attempts, so the final planet count can be lower than requested. The base size factor of 1.25 (rule 1) makes the requested count fit in the tested case of 1000 planets. For other counts it is not guaranteed, and a larger `mapScale` leaves more room.
 4. No two planets may be closer than `minPlanetDistance`.
 5. Every planet must have at least `minReachablePlanets` other planets within `maxHopDistance`.
-6. After the first placement, the generator removes every planet that breaks rule 4 or 5, and repeats until no planet breaks a rule. The final planet count can be lower than the requested count.
+6. After placement, the generator runs two more steps. The final planet count can be lower than the requested count.
+   - Rule 5: every planet that has too few neighbours is removed, and this repeats until no planet breaks the rule.
+   - Connected map: two planets are connected when the distance between them is at most `maxHopDistance`. Planets that can reach each other through a chain of connected planets form a group. Only the largest group is kept and all other planets are removed. If two groups have the same size, the group that contains the planet placed first is kept.
+     Rule 4 holds by construction: grid spacing is at least `minPlanetDistance`, and random mode rejects close positions. Planet IDs are assigned after these steps, so they have no gaps.
 7. The final planet count is used for the domination check.
 8. Every planet starts as **rogue** with random integer points from `planetPointsMin` to `planetPointsMax`. Its **max points** equal these starting points and never change.
-9. Players choose their starting planet. The planet keeps its points and its max points. How starting planets are picked is described in `game-ui.md`.
+9. Start of the match. When the host starts the match, the world is generated, the lobby is frozen, and every AI player claims a different random rogue planet, chosen with `seed`. The match then waits `startCountdownSeconds` and tick 1 begins. Human players claim their starting planet during the match (Section 10.4).
 
 ## 5. Game loop
 
 The game runs in ticks of `tickLengthMs`. Ticks are numbered from 1. Tick `n` covers match time up to `n × tickLengthMs`.
 
-**Player actions.** Link creation and removal requested during a tick are applied at the start of the next tick, before movement, in the order they were received. Each action is checked against Section 8 when it is applied. An action that is no longer valid at that moment (for example, the player no longer owns the source planet) is dropped.
+**Player actions.** Planet claims, link creation and link removal requested during a tick are applied at the start of the next tick, before movement, in the order the server received them, regardless of which player sent them. Each action is checked when it is applied: links against Section 8, claims against Section 10.4. An action that is no longer valid at that moment is dropped. For example, the player no longer owns the source planet, or an earlier action in the same tick already removed the link. When two actions conflict, the one received first is applied and the later one is checked against the new state.
 
 Each tick runs these steps in order:
 
@@ -159,7 +166,7 @@ Ships pass through each other in open space. Fights happen only on planets.
 
 1. A ship starts with `initialShipSpeed`.
 2. After each completed hop, the ship loses `speedDecayPercent` of the initial speed. This is a fixed amount (20 units per second with the defaults), not a percentage of the current speed.
-3. A departure is timestamped with the current time when the tick loop reaches the dispatch phase. Arrival time = departure timestamp + link length ÷ current speed. The ship arrives in the first tick whose movement phase time is at or after the arrival time.
+3. Time is simulated. Tick `n` ends at match time `n × tickLengthMs`. A ship that departs in tick `n` has departure time `n × tickLengthMs`. Its arrival time is the departure time plus link length ÷ current speed. It arrives in the first tick `m` whose end time `m × tickLengthMs` is at or after the arrival time. A ship never arrives in the tick it departed.
 4. A ship whose speed is 0 or less cannot start another hop.
 5. There is no separate hop limit. With the defaults, the speed decay allows 10 hops.
 6. A ship with no speed left still fights when it arrives. If it survives in the owner's fleet, it reinforces the planet when the planet has no active outgoing links, and is removed when the planet has active outgoing links.
@@ -202,7 +209,7 @@ A surviving fleet that owns the planet (arrived, waiting ships whose delay has e
 
 ### 7.4 Fleet order
 
-A fleet is an ordered list. Arriving ships and produced ships are added to the end, ordered by arrival time (production time for produced ships) and then by ship ID. Ships lost in battle are taken from the front. Ships that depart are also taken from the front.
+A fleet is an ordered list. Ships are added to the end when they arrive, in order of arrival time. Ships that arrive at exactly the same time are added in order of ship ID. Produced ships are added after the arrivals of the same tick. A ship waiting for its hop delay keeps its place. Ships lost in battle are taken from the front, including ships that are waiting. A departing ship is the first ship in the fleet whose hop delay has ended. Ships that are still waiting are skipped.
 
 ### 7.5 Planet points
 
@@ -226,7 +233,7 @@ Checks run at the end of every tick, in this order.
 
 ### 9.1 Elimination
 
-A player is eliminated for good, and becomes a spectator, only when they own 0 planets and have 0 ships. Ships include ships in flight and ships waiting for their next hop. A player with no planets but with ships left is still in the match. A ship of theirs that captures a neutral planet gives them a planet again.
+A player who has not yet claimed a starting planet cannot be eliminated. After the claim, a player is eliminated for good, and becomes a spectator, only when they own 0 planets and have 0 ships. Ships include ships in flight and ships waiting for their next hop. A player with no planets but with ships left is still in the match. A ship of theirs that captures a neutral planet gives them a planet again.
 
 If every player is eliminated, the match ends immediately as a draw.
 
@@ -255,16 +262,19 @@ The match does not end when only one player remains. That player keeps playing u
 
 ## 10. Players and connections
 
-1. The host starts the match. No player can join after it has started. There is no minimum number of players.
+1. The host starts the match. No new player can join after it has started. A player who is already in the match can reconnect. There is no minimum number of players.
 2. Players cannot create or send ships by hand. Production, routing, movement, battles, captures and reinforcements are automatic.
 3. Players can select and inspect any planet or ship. All information is visible to all players.
-4. Players can create links and remove links (Section 8).
-5. The match cannot be paused, by the host or by any player.
-6. If a player disconnects, their planets keep running. The player can reconnect and regain control.
+4. Each human player can claim one starting planet, once, at any time during the match. Finding a good planet quickly is part of the game.
+   - The planet must be rogue (unowned, at least 1 point). Its number of points does not matter.
+   - The planet becomes owned by the player and keeps its current points and its max points.
+   - A claim of a planet that is no longer rogue, or a second claim by the same player, is dropped.
+   - The match timer is not delayed for players who claim later.
+   - A player who never claims stays in the match with 0 planets until the match ends.
+5. Players can create links and remove links (Section 8).
+6. The match cannot be paused, by the host or by any player.
+7. If a player disconnects, their planets keep running. The player can reconnect and regain control.
 
 ## 11. Open items
 
-1. How starting planets are picked and how two players choosing the same planet are handled. To be defined in `game-ui.md`.
-2. The generator algorithm, including the case where removals leave fewer planets than players, and the technical details of the game loop. To be defined in `game-design.md`.
-3. How ship IDs are assigned (see Section 7.4).
-4. How actions from different players that arrive at the same time are resolved.
+1. The generator algorithm, including the case where removals leave fewer planets than players, and the technical details of the game loop. To be defined in `game-design.md`.
