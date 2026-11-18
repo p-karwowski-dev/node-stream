@@ -38,6 +38,7 @@ Main loop:
 | **Fleet**                    | All ships of one player that are on one planet (arrived, waiting, or just produced).                                                                  |
 | **Tick**                     | One step of the game loop (see Section 5).                                                                                                            |
 | **Link owner**               | The owner of the link's source planet.                                                                                                                |
+| **Ship ID**                  | A number that identifies a ship. Unique within a match, never reused, and increasing with the order in which ships are created.                       |
 
 Planet colours: the owner sees their own planets with a green glow and enemy planets with a red glow. Rogue and neutral planets use the same neutral colour. Spectators see the same colours.
 
@@ -45,29 +46,29 @@ Planet colours: the owner sees their own planets with a green glow and enemy pla
 
 All values can be changed in the config. Defaults are shown.
 
-| Parameter                             |      Default | Meaning                                                                                            |
-| ------------------------------------- | -----------: | -------------------------------------------------------------------------------------------------- |
-| `maxPlayers`                          |           20 | Maximum number of players in a match.                                                              |
-| `matchDurationSeconds`                |          300 | Match length.                                                                                      |
-| `startCountdownSeconds`               |            5 | Wait between the start of the match and tick 1. Players use it to load and look at the map.        |
-| `dominationPercent`                   |           30 | Share of planets that wins the match.                                                              |
-| `planetDistribution`                  | `[10,10,10]` | Grid: planets per axis `[x,y,z]`. Random: a single integer (planet count). `null` is not accepted. |
-| `minPlanetDistance`                   |          200 | Minimum distance between two planets (units).                                                      |
-| `minReachablePlanets`                 |            0 | Minimum number of planets within `maxHopDistance` of every planet.                                 |
-| `mapScale`                            |            1 | Multiplier for the map size. Must be 1 or more. Mainly used in random mode (Section 4).            |
-| `maxHopDistance`                      |          400 | Maximum link length and maximum length of one hop (units).                                         |
-| `initialShipSpeed`                    |          200 | Ship speed on the first hop (units per second).                                                    |
-| `speedDecayPercent`                   |           10 | Speed lost after each completed hop, as a percentage of the initial speed.                         |
-| `hopDelayTicks`                       |            0 | Ticks a ship waits at a planet between arriving and departing.                                     |
-| `tickLengthMs`                        |          100 | Length of one tick.                                                                                |
-| `productionIntervalTicks`             |           10 | Ticks between production rounds (10 ticks of 100 ms = 1 second).                                   |
-| `shipsPerProduction`                  |            1 | Ships produced by each owned planet per production round.                                          |
-| `planetPointsMin` / `planetPointsMax` |       1 / 50 | Range of random starting points of a planet.                                                       |
-| `attackDamagePerShip`                 |            1 | Points a surviving attacking ship removes from a planet.                                           |
-| `reinforcementPerShip`                |            1 | Points a surviving owner ship adds to its planet.                                                  |
-| `capturePoints`                       |            1 | Points a planet has right after it is captured.                                                    |
-| `seed`                                |       random | Seed for the world generator.                                                                      |
-| `unitToPixel`                         |           10 | UI only. 1 unit = 10 pixels.                                                                       |
+| Parameter                             |      Default | Meaning                                                                                                    |
+| ------------------------------------- | -----------: | ---------------------------------------------------------------------------------------------------------- |
+| `maxPlayers`                          |           20 | Maximum number of players in a match.                                                                      |
+| `matchDurationSeconds`                |          300 | Match length.                                                                                              |
+| `startCountdownSeconds`               |            5 | Wait between the start of the match and tick 1. Players use it to load and look at the map.                |
+| `dominationPercent`                   |           30 | Share of planets that wins the match.                                                                      |
+| `planetDistribution`                  | `[10,10,10]` | Grid: planets per axis `[x,y,z]`. Random: a single integer (planet count). `null` is not accepted.         |
+| `minPlanetDistance`                   |          200 | Minimum distance between two planets (units).                                                              |
+| `minReachablePlanets`                 |            0 | Minimum number of planets within `maxHopDistance` of every planet.                                         |
+| `mapScale`                            |            1 | Multiplier for the map size. Must be 1 or more. Applied on top of the base size in both modes (Section 4). |
+| `maxHopDistance`                      |          400 | Maximum link length and maximum length of one hop (units).                                                 |
+| `initialShipSpeed`                    |          200 | Ship speed on the first hop (units per second).                                                            |
+| `speedDecayPercent`                   |           10 | Speed lost after each completed hop, as a percentage of the initial speed.                                 |
+| `hopDelayTicks`                       |            0 | Ticks a ship waits at a planet between arriving and departing.                                             |
+| `tickLengthMs`                        |          100 | Length of one tick.                                                                                        |
+| `productionIntervalTicks`             |           10 | Ticks between production rounds (10 ticks of 100 ms = 1 second).                                           |
+| `shipsPerProduction`                  |            1 | Ships produced by each owned planet per production round.                                                  |
+| `planetPointsMin` / `planetPointsMax` |       1 / 50 | Range of random starting points of a planet.                                                               |
+| `attackDamagePerShip`                 |            1 | Points a surviving attacking ship removes from a planet.                                                   |
+| `reinforcementPerShip`                |            1 | Points a surviving owner ship adds to its planet.                                                          |
+| `capturePoints`                       |            1 | Points a planet has right after it is captured.                                                            |
+| `seed`                                |       random | Seed for the world generator and for the random choices of AI players.                                     |
+| `unitToPixel`                         |           10 | UI only. 1 unit = 10 pixels.                                                                               |
 
 ### 3.1 Parameter validation
 
@@ -277,4 +278,4 @@ The match does not end when only one player remains. That player keeps playing u
 
 ## 11. Open items
 
-1. The generator algorithm, including the case where removals leave fewer planets than players, and the technical details of the game loop. To be defined in `game-design.md`.
+None. The generator algorithm, including the case where removals leave fewer planets than players, and the technical details of the game loop are defined in `game-design.md`.

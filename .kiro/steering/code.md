@@ -25,3 +25,8 @@ These rules apply to all code in this project.
 4. Use descriptive names. Avoid abbreviations, except common ones such as `id`.
 5. Game parameters come from the config object. Do not hardcode values from `game-rules.md` Section 3.
 6. Simulation randomness comes only from named seeded streams, created with `createStream(seed, name)`. Each purpose has its own stream (for example `world` and `aiClaims`). Code must not share a stream across purposes and must not use `Math.random`.
+
+## Ignored files
+
+1. Do not read, open or use `assets/mock Orbital Conquest.png`. Ignore it in all tasks, including reviews and design work.
+2. Do not take requirements, names, numbers or layouts from it.
