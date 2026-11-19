@@ -3,6 +3,20 @@
 **Status:** Draft notes only. The full UI specification is still to be written.
 **Scope:** Lobby, in-game UI, rendering. Server logic is in `game-design.md`. Rules are in `game-rules.md`.
 
+## MVP scope
+
+The UI layout is based on the mock `mock Orbital Conquest.png`. The mock is used only to help place elements on the screen. It is not a source of requirements, names, numbers or styling.
+
+The MVP covers only the essential functionality that allows end-to-end gameplay. It does not focus on styling. It displays functional boxes only.
+
+Essential functionality:
+
+1. Lobby. The player can add AI players and start the game.
+2. Main screen.
+   - Left panel: list of planets. No sorting and no styling. Each entry is only the planet name in the colour of its owner (note 7).
+   - Main 3D space: planets and links, with basic colours.
+3. End screen. Displayed when the game ends. It has a Play again button that takes the player back to the lobby.
+
 ## Notes collected from the server discussion
 
 1. Candidate UI stack: React (lobby and HUD), three.js (3D scene), Electron (desktop shell), WebGPU. Three.js `WebGPURenderer` falls back to WebGL 2 when WebGPU is not available.
