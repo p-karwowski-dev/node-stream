@@ -9,13 +9,24 @@ The UI layout is based on the mock `mock Orbital Conquest.png`. The mock is used
 
 The MVP covers only the essential functionality that allows end-to-end gameplay. It does not focus on styling. It displays functional boxes only.
 
+The MVP is a human against AI players only. It has a simple UI and runs against a local server. Its purpose is to let a developer test all game mechanics end to end. Spectators and multiple human players are out of scope.
+
 Essential functionality:
 
-1. Lobby. The player can add AI players and start the game.
+1. Lobby.
+   - Add and remove AI players.
+   - Show connected players.
+   - Edit match parameters.
+   - Start the game.
 2. Main screen.
-   - Left panel: list of planets. No sorting and no styling. Each entry is only the planet name in the colour of its owner (note 7).
-   - Main 3D space: planets and links, with basic colours.
-3. End screen. Displayed when the game ends. It has a Play again button that takes the player back to the lobby.
+   - Countdown: shows `countdownSeconds` from `matchStarted` before ticks begin.
+   - Left panel: list of planets. No sorting and no styling. Each entry shows the planet name in the colour of its owner (note 7), plus the ship count.
+   - Main 3D space: planets and links, with basic colours. Each planet shows its owner (by colour) and its ship count.
+   - Ships: drawn as basic instanced points or dots (note 4), positioned by interpolation (note 5b).
+   - Claim a planet: the player clicks a rogue planet to claim it as a starting planet (note 5).
+   - Links: the player picks a source planet and a target planet within `maxHopDistance` to create a link, and can remove an existing link (note 6).
+   - Message bar: a brief message at the top of the screen, for example when `commandRejected` arrives.
+3. End screen. Displayed when the game ends. It shows a plain winner line and a Play again button that takes the player back to the lobby. The lobby keeps the previous players, AI players and match parameters.
 
 ## Notes collected from the server discussion
 
