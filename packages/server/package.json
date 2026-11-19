@@ -1,0 +1,15 @@
+{
+  "name": "@node-stream/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start-server": "tsx src/cli/main.ts start-server"
+  },
+  "dependencies": {
+    "@node-stream/shared": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0"
+  }
+}
