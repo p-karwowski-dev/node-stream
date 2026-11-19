@@ -75,6 +75,7 @@ Each module lives in its own folder under `server/src/core/` and exposes a small
 | `world`    | Generator, spatial index, distance and reachability checks     | Section 4           |
 | `planets`  | Planet state, points, ownership, rogue and neutral transitions | Sections 2, 7.5     |
 | `links`    | Link registry, ordered outgoing list per planet, cursor        | Sections 6.2, 8     |
+| `players`  | Player roster, claimed and eliminated flags                    | Sections 9.1, 10.4  |
 | `ships`    | Ship creation, ship ID counter, speed and decay                | Sections 6.4, 7.4   |
 | `arrivals` | Queue of ships in flight, ordered by arrival time              | Section 6.4         |
 | `fleets`   | Fleet per player per planet, fleet order, ready ships          | Sections 6.3, 7.4   |
