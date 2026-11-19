@@ -26,6 +26,10 @@ These rules apply to all code in this project.
 5. Game parameters come from the config object. Do not hardcode values from `game-rules.md` Section 3.
 6. Simulation randomness comes only from named seeded streams, created with `createStream(seed, name)`. Each purpose has its own stream (for example `world` and `aiClaims`). Code must not share a stream across purposes and must not use `Math.random`.
 
+## Tests during development
+
+1. Tests may be skipped while a feature is under development. Do not run or write tests unless the user asks for them.
+
 ## Ignored files
 
 1. Do not read, open or use `assets/mock Orbital Conquest.png`. Ignore it in all tasks, including reviews and design work.
