@@ -7,7 +7,9 @@
     "typecheck": "tsc --build",
     "check:comments": "tsx tools/check-no-comments.ts",
     "check": "npm run typecheck && npm run check:comments",
-    "start-server": "npm run start-server -w @node-stream/server"
+    "start-server": "npm run start-server -w @node-stream/server",
+    "run-match": "tsx packages/server/src/cli/main.ts run-match",
+    "benchmark": "tsx packages/server/src/cli/main.ts benchmark"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
