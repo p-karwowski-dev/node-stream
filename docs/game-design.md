@@ -33,7 +33,15 @@ Not in the MVP: accounts, database, matchmaking, multi-machine scaling, anti-che
 | Client               | Browser first. Electron is added later.                                                 |
 | Time                 | Simulated: tick `n` ends at `n × tickLengthMs` (rules Section 6.4)                      |
 
-Why a single thread is enough: a tick handles only the ships that arrive or are produced in that tick, not every ship in flight (Section 6). Estimates, to be confirmed by the benchmark in milestone M4: about 1000 ships produced per second in the worst case, about 30,000 ships in flight, about 100 arrivals per tick.
+Why a single thread is enough: a tick handles only the ships that arrive or are produced in that tick, not every ship in flight (Section 6). Benchmark results from milestone M4 (seed 1, 20 AI players, `npm run benchmark`):
+
+| Map                  | Planets | Ticks per second | Slowest tick | Peak ships produced per second | Peak ships in flight | Peak arrivals per tick |
+| -------------------- | ------: | ---------------: | -----------: | -----------------------------: | -------------------: | ---------------------: |
+| Default (10x10x10)   |    1000 |             5205 |        5 ms  |                            608 |                1,623 |                    274 |
+| Grid 15x15x15        |    3375 |             1428 |       24 ms  |                          2,617 |                6,116 |                    937 |
+| Grid 20x20x20        |    8000 |              364 |       75 ms  |                          7,794 |               15,467 |                  2,167 |
+
+Real time needs 10 ticks per second, and one tick has a budget of 100 ms. All three maps fit. Arrivals come in bursts because every owned planet produces on the same tick.
 
 ## 3. Repository layout
 
@@ -236,6 +244,8 @@ AI players run in the server and call the core directly. They do not use the net
 | `start-server` | Starts the WebSocket server and lobby                                                                  |
 | `run-match`    | Runs a headless match with AI players only, from a config file and seed. Prints the result and timing. |
 | `benchmark`    | Runs `run-match` for the default config and larger maps and reports ticks per second                   |
+
+Usage, options and the config file format are in `docs/README.md`.
 
 ## 11. Protocol
 
