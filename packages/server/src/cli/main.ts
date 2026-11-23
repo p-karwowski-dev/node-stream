@@ -2,11 +2,9 @@ import { MatchSetupError } from "../core/match/index.js";
 import { benchmarkCommand } from "./benchmark/benchmarkCommand.js";
 import { CliError } from "./cliError.js";
 import { runMatchCommand } from "./runMatchCommand.js";
-function startServerPlaceholder(): void {
-  console.log("start-server is not implemented yet");
-}
-const commands = new Map<string, (args: string[]) => void>([
-  ["start-server", startServerPlaceholder],
+import { startServerCommand } from "./startServerCommand.js";
+const commands = new Map<string, (args: string[]) => void | Promise<void>>([
+  ["start-server", startServerCommand],
   ["run-match", runMatchCommand],
   ["benchmark", benchmarkCommand],
 ]);
@@ -19,7 +17,7 @@ if (command === undefined) {
   process.exitCode = 1;
 } else {
   try {
-    command(process.argv.slice(3));
+    await command(process.argv.slice(3));
   } catch (error) {
     if (!(error instanceof CliError || error instanceof MatchSetupError)) {
       throw error;

@@ -43,3 +43,38 @@ npm run benchmark
 ```
 
 Runs 20 AI players on the default map and on 15x15x15 and 20x20x20 grids, and prints ticks per second, the slowest tick and peak ship counts. `--seed <integer>` changes the seed (default 1).
+
+## Start the server
+
+```
+npm run start-server
+npm run start-server -- --port 9000
+```
+
+The server and lobby listen on `ws://127.0.0.1:8080` (`--port <1..65535>` changes the port). It is for local use only: it binds to 127.0.0.1 and has no passwords and no TLS. Ctrl-C stops it.
+
+The seed is random. It is printed on the console and sent as `config.seed` in every `lobbyState`. The host can change it, and any other parameter, with `setConfig`. Console output:
+
+```
+lobby open on ws://127.0.0.1:8080, seed 1959013103
+match started: 4 players, 125 planets, seed 1
+match ended at tick 151: timer, winner player 3; command log: 48 commands
+server stopped
+```
+
+One server runs one match. After the match ends, the result stays available to reconnecting players until the server is stopped.
+
+## Protocol
+
+Connect to `ws://127.0.0.1:<port>` and send one JSON object per message:
+
+1. Send `{ "type": "join", "name": "Alice" }`. The reply is `joined { playerId, token, isHost }`. The first human who joins is the host.
+2. Keep the `token`. After a disconnect, open a new connection and send `{ "type": "reconnect", "token": "..." }`. You get `joined` again and then the current state.
+3. The host edits the config with `{ "type": "setConfig", "changes": { "matchDurationSeconds": 120 } }`, adds AI players with `{ "type": "addAi", "strategy": "weakestInRange" }`, removes them with `removeAi { playerId }`, and starts with `{ "type": "startMatch" }`.
+4. During the match, send `claimPlanet { commandId, planetId }`, `createLink { commandId, from, to }` and `removeLink { commandId, from, to }`. Choose your own `commandId` values; rejected commands come back as `commandRejected` with that ID.
+
+Server messages: `joined`, `lobbyState` (on every lobby change), `matchStarted` (full state and countdown), `tick` (one per tick, with events; the last one contains `matchEnded`), `snapshot` (full state after a reconnect), `error { code, message, configErrors }`.
+
+Limits: 4 KiB per message (larger messages get `error messageTooLarge`), 64 KiB hard limit (the connection is closed), binary messages are rejected, and the connection is closed after 10 invalid messages. Unknown fields are rejected. Names are 1 to 32 characters.
+
+Message fields and error codes are in `game-design.md` Section 11.

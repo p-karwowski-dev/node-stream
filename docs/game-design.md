@@ -204,7 +204,7 @@ A match ends on `matchEnded`. The `ended` phase keeps the result available for d
 
 Drives `match.step()`.
 
-1. Real-time mode: schedules ticks from a monotonic clock so errors do not accumulate. If the server falls behind, it runs the missing ticks, up to a cap per cycle.
+1. Real-time mode: schedules ticks from a monotonic clock so errors do not accumulate. If the server falls behind, it runs the missing ticks, up to a cap per cycle. The cap is 5 ticks per cycle (runner option `maxCatchUpTicksPerCycle`). Ticks beyond the cap run in the next cycle after a zero-delay yield, so network I/O is served in between. No tick is skipped.
 2. Fast mode: steps without waiting. Used for headless matches and the benchmark. It is a runner option, not a game parameter.
 3. Hands each tick result to the network adapter and to the command log.
 
@@ -215,6 +215,9 @@ Drives `match.step()`.
 3. The host is the first human who joins.
 4. Enforces `maxPlayers`.
 5. After the match starts, only existing players can reconnect.
+6. A disconnected human stays in the player list (`connected: false`). A disconnected host stays host and gets host rights back on reconnect.
+7. `setConfig` cannot lower `maxPlayers` below the current number of players. `startMatch` checks this again with the config.
+8. Commands sent during the countdown are accepted and apply in tick 1. After the match ends, the lobby stays in `ended` until the server stops.
 
 ### 10.3 network
 
@@ -222,7 +225,9 @@ Drives `match.step()`.
 2. A session per connection. A reconnect token (random identifier created on `join`) maps a returning connection to its player.
 3. Validates every incoming message: shape, field types and size. Unknown or invalid messages get an `error` and are ignored.
 4. Sends the per-tick message to every connected human, including eliminated players, who become spectators.
-5. Local use only: no passwords, no TLS.
+5. Local use only: no passwords, no TLS. The server listens on 127.0.0.1.
+6. Limits: a text message over 4 KiB gets `error messageTooLarge`. Above 64 KiB `ws` closes the connection with code 1009. Binary messages are invalid. After 10 invalid messages (`invalidMessage` or `messageTooLarge`) the server closes the connection with code 1008. Names are 1 to 32 characters after trimming.
+7. A `reconnect` for a player who still has an open connection closes the older connection with code 4000.
 
 ### 10.4 ai
 
@@ -241,7 +246,7 @@ AI players run in the server and call the core directly. They do not use the net
 
 | Command        | Purpose                                                                                                |
 | -------------- | ------------------------------------------------------------------------------------------------------ |
-| `start-server` | Starts the WebSocket server and lobby                                                                  |
+| `start-server` | Starts the WebSocket server and lobby on 127.0.0.1 (`--port`, default 8080)                            |
 | `run-match`    | Runs a headless match with AI players only, from a config file and seed. Prints the result and timing. |
 | `benchmark`    | Runs `run-match` for the default config and larger maps and reports ticks per second                   |
 
@@ -270,11 +275,15 @@ WebSocket, one JSON object per message with a `type` field.
 | Message                                                            | Purpose                                                                                           |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
 | `joined {playerId, token, isHost}`                                 | Reply to `join` and `reconnect`                                                                   |
-| `lobbyState {players, config, hostId}`                             | Sent on every lobby change                                                                        |
+| `lobbyState {players, config, hostId}`                             | Sent on every lobby change. Each player has `id, name, kind, strategy, connected`.                |
 | `matchStarted {countdownSeconds, config, players, planets, links}` | Initial full state. Tick 0.                                                                       |
 | `tick {tick, events}`                                              | One per tick, even with no events, so the client clock stays in sync                              |
-| `snapshot {tick, planets, links, ships, players}`                  | Full state for a reconnect. `ships` lists every ship in flight with the fields of `shipDeparted`. |
-| `error {code, message}`                                            | Invalid message, wrong phase, not host, invalid config                                            |
+| `snapshot {config, tick, status, planets, links, ships, players, result}` | Full state for a reconnect after the countdown. `ships` lists every ship in flight with the fields of `shipDeparted`. `result` is the `matchEnded` event, or `null` while running. |
+| `error {code, message, configErrors}`                              | Invalid message, wrong phase, not host, invalid config. `configErrors` is empty unless `code` is `invalidConfig`. |
+
+A `reconnect` during the countdown gets `matchStarted` with the remaining `countdownSeconds` instead of a `snapshot`.
+
+Error codes: `invalidMessage`, `messageTooLarge`, `notJoined`, `alreadyJoined`, `unknownToken`, `wrongPhase`, `notHost`, `lobbyFull`, `unknownStrategy`, `notAiPlayer`, `invalidConfig`, `emptyWorld`. Only `invalidMessage` and `messageTooLarge` count toward the disconnect limit (Section 10.3).
 
 Accepted commands are confirmed by `linkCreated`, `linkRemoved` or `planetChanged` in a later `tick`. Dropped commands produce `commandRejected` in the `tick` where they were applied.
 
@@ -370,7 +379,7 @@ How to read it: "volume per planet" is the container volume divided by the place
 ## 16. Open items
 
 1. **Grouped departures.** Revisit after the MVP. Each ship currently has its own `shipDeparted` event, up to about 1000 per second. Grouping ships by link and departure tick would reduce traffic.
-2. **Message validation library.** Decide between hand-written type guards and a schema library for the shared protocol.
+2. **Message validation library.** Decided in M5: hand-written type guards in the network adapter. Unknown fields are rejected. A schema library can replace them inside the adapter later.
 3. **Replay.** The command log is recorded, but replay playback is not planned for the MVP.
 4. **Host handover.** If the host never reconnects before the match starts, the lobby has no host. Not handled in the MVP.
 5. **AI tuning.** The interval and the link rules of `weakestInRange` are first guesses. They were not tuned in M4 and are tuned together with game balance after the MVP.
@@ -383,4 +392,4 @@ How to read it: "volume per planet" is the container volume divided by the place
    - All AI players use the same strategy. Matches with mixed strategies are not covered.
 7. **Stalemates.** In a one-hour 4-AI match (seed 1, `dominationPercent` 100) two players were eliminated and the other two held 565 and 432 planets until the timer. A long match can freeze. A mechanism to break it is not designed.
 8. **Benchmark coverage.** All runs use one seed and one strategy. Add multi-seed runs and long matches (the one-hour match ran at about 3,000 ticks per second with 4 AI players).
-9. **Real-time runner mode.** M4 built only fast mode. The catch-up cap per cycle (Section 10.1) is not defined and is decided in M5.
+9. **Real-time runner mode.** Decided in M5: the catch-up cap is 5 ticks per cycle (Section 10.1).
