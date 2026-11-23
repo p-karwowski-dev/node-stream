@@ -373,4 +373,14 @@ How to read it: "volume per planet" is the container volume divided by the place
 2. **Message validation library.** Decide between hand-written type guards and a schema library for the shared protocol.
 3. **Replay.** The command log is recorded, but replay playback is not planned for the MVP.
 4. **Host handover.** If the host never reconnects before the match starts, the lobby has no host. Not handled in the MVP.
-5. **AI tuning.** The interval and the link rules of `weakestInRange` are first guesses and will be tuned in M4.
+5. **AI tuning.** The interval and the link rules of `weakestInRange` are first guesses. They were not tuned in M4 and are tuned together with game balance after the MVP.
+6. **AI gaps found in M4.** `weakestInRange` links each owned planet to the weakest non-owned planet in range. Gaps to address after the MVP:
+   - No defence. It does not detect attacks or move ships to a threatened planet.
+   - No routing through own planets to the frontier. A planet with no unowned planet in range stays idle.
+   - Targeting looks only at planet points, not at enemy fleets or strength.
+   - One outgoing link per planet. Multiple links per planet are not used.
+   - It never sends `claimPlanet`, so an AI player that starts without a planet stays idle.
+   - All AI players use the same strategy. Matches with mixed strategies are not covered.
+7. **Stalemates.** In a one-hour 4-AI match (seed 1, `dominationPercent` 100) two players were eliminated and the other two held 565 and 432 planets until the timer. A long match can freeze. A mechanism to break it is not designed.
+8. **Benchmark coverage.** All runs use one seed and one strategy. Add multi-seed runs and long matches (the one-hour match ran at about 3,000 ticks per second with 4 AI players).
+9. **Real-time runner mode.** M4 built only fast mode. The catch-up cap per cycle (Section 10.1) is not defined and is decided in M5.
