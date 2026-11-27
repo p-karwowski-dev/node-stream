@@ -6,6 +6,7 @@ export type {
   LobbyActionMessage,
   ReconnectMessage,
   RemoveAiMessage,
+  ReturnToLobbyMessage,
   SetConfigMessage,
   StartMatchMessage,
 } from "./clientMessages.js";

@@ -48,6 +48,7 @@ const parsers: ReadonlyMap<string, FieldParser> = new Map<string, FieldParser>([
   ],
   ["removeAi", withKeys(["playerId"], ({ playerId }) => (isIdentifier(playerId) ? { type: "removeAi", playerId } : undefined))],
   ["startMatch", withKeys([], () => ({ type: "startMatch" }))],
+  ["returnToLobby", withKeys([], () => ({ type: "returnToLobby" }))],
   [
     "claimPlanet",
     withKeys(["commandId", "planetId"], ({ commandId, planetId }) =>

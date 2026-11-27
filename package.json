@@ -9,7 +9,9 @@
     "check": "npm run typecheck && npm run check:comments",
     "start-server": "tsx packages/server/src/cli/main.ts start-server",
     "run-match": "tsx packages/server/src/cli/main.ts run-match",
-    "benchmark": "tsx packages/server/src/cli/main.ts benchmark"
+    "benchmark": "tsx packages/server/src/cli/main.ts benchmark",
+    "start-client": "tsx packages/client/scripts/startDevServer.ts",
+    "build-client": "tsx packages/client/scripts/buildClient.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

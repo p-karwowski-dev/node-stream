@@ -5,6 +5,7 @@ import type {
   MatchConfig,
   MatchEndedEvent,
   PlayerId,
+  ReturnToLobbyMessage,
 } from "@node-stream/shared";
 import { MatchSetupError } from "../../core/match/index.js";
 import { findStrategy } from "../ai/index.js";
@@ -26,6 +27,7 @@ export interface MatchStartSummary {
 export interface LobbyHooks {
   readonly onMatchStarted?: (summary: MatchStartSummary) => void;
   readonly onMatchEnded?: (lastTick: number, ending: MatchEndedEvent, commandLogEntries: number) => void;
+  readonly onLobbyReopened?: () => void;
 }
 
 export interface LobbyOptions {
@@ -43,13 +45,15 @@ export interface Lobby {
   isHost(playerId: PlayerId): boolean;
   playerConnected(playerId: PlayerId): void;
   playerDisconnected(playerId: PlayerId): void;
-  handle(playerId: PlayerId, message: LobbyActionMessage | Command): void;
+  handle(playerId: PlayerId, message: LobbyActionMessage | ReturnToLobbyMessage | Command): void;
   stop(): void;
 }
 
 const wrongPhaseForLobbyAction = "This action is only allowed in the lobby before the match starts";
 const wrongPhaseForCommand = "Commands are only accepted while the match is running";
 const wrongPhaseForJoin = "The match has started; only existing players can reconnect";
+const wrongPhaseForReturn = "The match has not ended yet";
+const notHostText = "Only the host can do this";
 
 export function createLobby(options: LobbyOptions): Lobby {
   const { outbox, hooks = {} } = options;
@@ -99,7 +103,7 @@ export function createLobby(options: LobbyOptions): Lobby {
       return;
     }
     if (roster.hostId() !== playerId) {
-      reply(playerId, errorMessage("notHost", "Only the host can do this"));
+      reply(playerId, errorMessage("notHost", notHostText));
       return;
     }
     switch (message.type) {
@@ -140,6 +144,21 @@ export function createLobby(options: LobbyOptions): Lobby {
         return;
     }
   };
+  const returnToLobby = (playerId: PlayerId) => {
+    if (phase !== "ended") {
+      reply(playerId, errorMessage("wrongPhase", wrongPhaseForReturn));
+      return;
+    }
+    if (roster.hostId() !== playerId) {
+      reply(playerId, errorMessage("notHost", notHostText));
+      return;
+    }
+    session?.stop();
+    session = undefined;
+    phase = "lobby";
+    broadcastLobbyState();
+    hooks.onLobbyReopened?.();
+  };
   return {
     join: (name) => {
       if (phase !== "lobby") {
@@ -176,6 +195,9 @@ export function createLobby(options: LobbyOptions): Lobby {
             return;
           }
           session.submit(playerId, message);
+          return;
+        case "returnToLobby":
+          returnToLobby(playerId);
           return;
         default:
           handleLobbyAction(playerId, message);

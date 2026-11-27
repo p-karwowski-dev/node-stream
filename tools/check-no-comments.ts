@@ -24,7 +24,7 @@ function findCommentPositions(text: string, path: string): number[] {
   const visit = (node: ts.Node) => {
     collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
     collect(ts.getTrailingCommentRanges(text, node.getEnd()));
-    ts.forEachChild(node, visit);
+    node.getChildren(sourceFile).forEach(visit);
   };
   visit(sourceFile);
   collect(ts.getLeadingCommentRanges(text, sourceFile.endOfFileToken.getFullStart()));

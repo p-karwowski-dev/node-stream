@@ -33,6 +33,9 @@ export interface StartMatchMessage {
   readonly type: "startMatch";
 }
 
+export interface ReturnToLobbyMessage {
+  readonly type: "returnToLobby";
+}
 export type LobbyActionMessage = SetConfigMessage | AddAiMessage | RemoveAiMessage | StartMatchMessage;
 
-export type ClientMessage = JoinMessage | ReconnectMessage | LobbyActionMessage | Command;
+export type ClientMessage = JoinMessage | ReconnectMessage | LobbyActionMessage | ReturnToLobbyMessage | Command;

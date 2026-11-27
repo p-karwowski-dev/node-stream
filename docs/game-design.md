@@ -67,7 +67,7 @@ node-stream/
           ai/
           runner/
         cli/                   start server, headless match, benchmark
-    client/                    described in game-ui.md
+    client/                    Vite app: protocol, state, session (no UI code), ui (React), scene (three.js); see game-ui.md
 ```
 
 Dependency rule: `core` imports only `shared` and itself. `adapters` import `core` and `shared`. `cli` imports adapters. Nothing in `core` touches the network, timers, files or the wall clock.
@@ -196,7 +196,7 @@ Start sequence, run by the lobby adapter when the host sends `startMatch`:
 5. After the countdown, the runner starts calling `step()`. Tick 1 begins.
 6. Human players send `claimPlanet` during the match.
 
-A match ends on `matchEnded`. The `ended` phase keeps the result available for display.
+A match ends on `matchEnded`. The `ended` phase keeps the result available for display. The host sends `returnToLobby` to go back to `lobby`. Players, AI players and the config, including the seed, are kept, so the host can start the next match at once or change parameters first.
 
 ## 10. Adapters
 
@@ -211,13 +211,13 @@ Drives `match.step()`.
 ### 10.2 lobby
 
 1. Keeps the player list (humans and AI), the host, and the config being edited.
-2. Host-only actions: edit config, add or remove AI, start the match.
+2. Host-only actions: edit config, add or remove AI, start the match, return to the lobby after the match (`returnToLobby`).
 3. The host is the first human who joins.
 4. Enforces `maxPlayers`.
 5. After the match starts, only existing players can reconnect.
 6. A disconnected human stays in the player list (`connected: false`). A disconnected host stays host and gets host rights back on reconnect.
 7. `setConfig` cannot lower `maxPlayers` below the current number of players. `startMatch` checks this again with the config.
-8. Commands sent during the countdown are accepted and apply in tick 1. After the match ends, the lobby stays in `ended` until the server stops.
+8. Commands sent during the countdown are accepted and apply in tick 1. After the match ends, the lobby stays in `ended` until the host sends `returnToLobby` or the server stops.
 
 ### 10.3 network
 
@@ -266,6 +266,7 @@ WebSocket, one JSON object per message with a `type` field.
 | `addAi {strategy}`                  | lobby   | host             | Add an AI player            |
 | `removeAi {playerId}`               | lobby   | host             | Remove an AI player         |
 | `startMatch`                        | lobby   | host             | Start the match (Section 9) |
+| `returnToLobby`                     | ended   | host             | Back to the lobby after the match; players, AI players and config are kept |
 | `claimPlanet {commandId, planetId}` | running | human player     | Claim the starting planet   |
 | `createLink {commandId, from, to}`  | running | human player     | Queue a link                |
 | `removeLink {commandId, from, to}`  | running | human player     | Queue a link removal        |
@@ -282,6 +283,8 @@ WebSocket, one JSON object per message with a `type` field.
 | `error {code, message, configErrors}`                              | Invalid message, wrong phase, not host, invalid config. `configErrors` is empty unless `code` is `invalidConfig`. |
 
 A `reconnect` during the countdown gets `matchStarted` with the remaining `countdownSeconds` instead of a `snapshot`.
+
+`returnToLobby` in another phase gets `wrongPhase`, and from a player who is not the host it gets `notHost`. On success every connected player gets `lobbyState`.
 
 Error codes: `invalidMessage`, `messageTooLarge`, `notJoined`, `alreadyJoined`, `unknownToken`, `wrongPhase`, `notHost`, `lobbyFull`, `unknownStrategy`, `notAiPlayer`, `invalidConfig`, `emptyWorld`. Only `invalidMessage` and `messageTooLarge` count toward the disconnect limit (Section 10.3).
 

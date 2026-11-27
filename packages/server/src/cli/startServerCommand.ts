@@ -35,6 +35,9 @@ const consoleHooks: LobbyHooks = {
       `match ended at tick ${lastTick}: ${ending.reason}, winner ${describeWinner(ending.winnerId)}; command log: ${commandLogEntries} commands`,
     );
   },
+  onLobbyReopened: () => {
+    console.log("lobby reopened");
+  },
 };
 
 async function listenOrFail(start: () => Promise<NetworkServer>, port: number): Promise<NetworkServer> {
